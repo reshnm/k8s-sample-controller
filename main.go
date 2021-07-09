@@ -1,16 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"flag"
-	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -20,26 +21,27 @@ var (
 func createClient() kubernetes.Interface {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
-		log.Fatal("failed to build config", err)
+		klog.Fatal("failed to build config", err)
 	}
 
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatal("failed to create client", err)
+		klog.Fatal("failed to create client", err)
 	}
 
-	log.Println("client created")
+	klog.Info("client created")
 	return client
 }
 
 func main() {
+	klog.InitFlags(nil)
 	flag.Parse()
 
 	client := createClient()
 
 	podsInformerFactory := informers.NewSharedInformerFactoryWithOptions(
 		client,
-		time.Second * 30,
+		time.Second*30,
 		informers.WithNamespace(metav1.NamespaceDefault))
 
 	controller := CreateController(client, podsInformerFactory.Core().V1().Pods())
@@ -49,9 +51,12 @@ func main() {
 	podsInformerFactory.Start(stopCh)
 	go controller.Run(stopCh)
 
-	reader := bufio.NewReader(os.Stdin)
-	text, _ := reader.ReadString('\n')
-	log.Println(text)
+	sigTerm := make(chan os.Signal, 1)
+	signal.Notify(sigTerm, syscall.SIGTERM)
+	signal.Notify(sigTerm, syscall.SIGINT)
+	<-sigTerm
+
+	klog.Info("controller stopped")
 }
 
 func init() {
