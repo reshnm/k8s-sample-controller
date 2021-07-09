@@ -97,6 +97,8 @@ func (c *Controller) processNextWorkItem() bool {
 			c.workqueue.Forget(key)
 			utilruntime.HandleError(err)
 		}
+	} else {
+		c.workqueue.Forget(key)
 	}
 
 	return true
